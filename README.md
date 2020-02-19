@@ -11,22 +11,28 @@ This script reads in the latest exposure ID value from the latest report generat
 **(2)** Modify the "setup.sh."
 
 
-An example command to run the script will be:
+python MWS_pipeline_script.py [--nthreads NTHREADS] [--input_dir INPUT_DIR]
 
-python MWS_pipeline_script.py --nthreads 64 --input_dir /.../spectra-64  --output_dir /.../  --output_script_dir /.../  --report_dir /.../ 
+                 [--output_dir OUTPUT_DIR] [--output_script_dir OUTPUT_SCRIPT_DIR] 
+                 
+                 [--report_dir REPORT_DIR] [--allobjects] [--whole_spectra64]
 
-**Options:**
+**optional arguments:**
 
---nthreads: number of processors per node.
-
---input_dir: directory of input files to be processed.
-
---output_dir: directory for the output files.
-
---output_script_dir: Output directory for the slurm scripts, shell script, and ferre input files.
-
---report_dir: directory of the report files.
-
---whole_spectra64: the script will search and process every new exposures in the whole spectra64 directory. Otherwise it will read in pointing coordinates of new exposures from DESI db to find out which spectra64 files with those healpix numbers have been updated.
-
---allobjects: process not just MWS targets but every other types.
+  --nthreads            Number of processors per node.
+  
+  --input_dir           Directory of input files to be processed.
+  
+  --output_dir          Directory for the output files.
+  
+  --output_script_dir   Output directory for the slurm scripts, shell script, and ferre input files.
+  
+  --report_dir          Directory of the report files.
+  
+  --whole_spectra64     The script will search and process every new exposure in the whole spectra64 directory. 
+  
+                        Otherwise, it will read in pointing coordinates of new exposures from DESI db to find out
+                        
+                        which spectra64 files with those healpix numbers have been updated.
+                        
+  --allobjects          Process not just MWS targets but every other types.
