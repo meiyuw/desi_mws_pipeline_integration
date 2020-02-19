@@ -6,7 +6,7 @@ This script reads in the latest exposure ID value from the latest report generat
 
 **To setup:**
 
-**(1)** Follow the instructions to install rvspecfit and piferre packages. Please select the installtion directory to be the same as "DESI_MWS_root" in the "setup.sh"
+**(1)** Follow the instructions to install rvspecfit and piferre packages. Please make the installtion directory to be the same as "DESI_MWS_root" in the "setup.sh"
 
 **(2)** Modify the "setup.sh."
 
