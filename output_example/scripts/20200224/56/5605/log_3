@@ -1,0 +1,124 @@
+           1 /physics2/meiyuw/desi_out/script_output/20200224/56/5605/input.nml_3                                                                                                                                                                                                                                        
+ -----------------------------------------------------------------
+                     f e r r e          v4.8.7      
+
+ starting on 24- 2-2020   at   12:11:32.54
+ -----------------------------------------------------------------
+ /physics2/meiyuw/desi_out/script_output/20200224/56/5605/input.nml_3          68
+ load_control -> ndim=           3
+ load_control -> nov =           3
+ load_control -> snr =  -1.00000000    
+ load_control -> nruns=           1
+ load_control -> lsf=           0
+ load_control -> nthreads=           4
+synthfile: /home/meiyuw/desi_MWS_pipeline/piferre/grids/n_rdesi4-b.dat
+
+        
+ read_f       -> date =Wed Nov 23 11:07:46 2016                                                                                                                                                                                                                                                                                    
+ read_f       -> n_p  =          12           6           3
+ read_f       -> wave =   3579.19995      0.500000000    
+ read_f       -> id   =nsc4                                                                                                                                                                                                                                                                                                        
+ read_f       -> label=METALS                                       TEFF                                         LOGG                                         
+ read_f       -> npix =        4759
+ lambdamin=   3579.19995    
+ npix=        4759
+ wave(2)=  0.500000000    
+ /home/meiyuw/desi_MWS_pipeline/piferre/grids/n_rdesi4-r.dat                                                                                                                                                                                                                                                 
+        
+ read_f       -> date =Wed Nov 23 11:07:46 2016                                                                                                                                                                                                                                                                                    
+ read_f       -> n_p  =          12           6           3
+ read_f       -> wave =   5635.20020      0.500000000    
+ read_f       -> id   =nsc4                                                                                                                                                                                                                                                                                                        
+ read_f       -> label=METALS                                       TEFF                                         LOGG                                         
+ read_f       -> npix =        4231
+ /home/meiyuw/desi_MWS_pipeline/piferre/grids/n_rdesi4-z.dat                                                                                                                                                                                                                                                 
+        
+ read_f       -> date =Wed Nov 23 11:07:46 2016                                                                                                                                                                                                                                                                                    
+ read_f       -> n_p  =          12           6           3
+ read_f       -> wave =   7445.20020      0.500000000    
+ read_f       -> id   =nsc4                                                                                                                                                                                                                                                                                                        
+ read_f       -> label=METALS                                       TEFF                                         LOGG                                         
+ read_f       -> npix =        4797
+ 
+ final value: npix=       13787
+ 
+ synthfile summary
+ *******************************************************************
+    #      R     start-pix  end-pix    start-lambda      end-lambda
+    1    2781.1       1     4759         3579.200         5958.700
+    2    4231.2    4760     8990         5635.200         7750.700
+    3    4466.3    8991    13787         7445.200         9843.700
+ *******************************************************************
+ read_f       -> scalef  =   1.00000000    
+ read_f       -> rangef  =   62111592.0    
+ read_f       -> badflux =  -123628280.    
+ ellapsed time:               10.4400  s
+ Done reading!
+ Counting the number of input objects...
+ main         -> nobj =           8
+ main         -> nlambda =           0
+ about to enter parallel region!
+ main         -> nthreads =           4
+ main         -> tid =           1
+ next object #           1
+ main         -> tid =           4
+ main         -> tid =           3
+ main         -> tid =           2
+ next object #           3
+ next object #           5
+ next object #           7
+
+           3 288230399660819987                                                                                                                                                                                                                                                                                          
+ SOL   0.7937   0.4000   0.4775
+ ERR   0.0113   0.0160   0.0264
+
+           1 288230399660820003                                                                                                                                                                                                                                                                                          
+ SOL   0.7952   0.4646   0.8531
+ ERR   0.0199   0.0331   0.0390
+ median snr =   24.1137924    
+ ellapsed time:               11.9400  s
+ next object #           4
+ median snr =   16.1575279    
+ ellapsed time:               11.9400  s
+ next object #           2
+
+           7 288230399660820301                                                                                                                                                                                                                                                                                          
+ SOL   0.8052   0.3999   0.4852
+ ERR   0.0112   0.0162   0.0263
+ median snr =   23.6543064    
+ ellapsed time:               12.1900  s
+ next object #           8
+
+           5 288230399660819552                                                                                                                                                                                                                                                                                          
+ SOL   0.6176   0.6693   1.0000
+ ERR   0.0952   0.1095   0.0880
+ median snr =   6.56645584    
+ ellapsed time:               12.9400  s
+ next object #           6
+
+           2 288230399660819987                                                                                                                                                                                                                                                                                          
+ SOL   0.7699   0.4000   0.3610
+ ERR   0.0123   0.0165   0.0264
+ median snr =   22.6340446    
+ ellapsed time:               13.1900  s
+
+STOP 1
+ quit: Run ended
+           4 288230399660820003                                                                                                                                                                                                                                                                                          
+ SOL   0.8420   0.4432   0.9454
+ ERR   0.0301   0.0430   0.0360
+ median snr =   15.1051149    
+ ellapsed time:               13.4400  s
+
+           8 288230399660819552                                                                                                                                                                                                                                                                                          
+ SOL   0.8018   0.5741   0.9999
+ ERR   0.0715   0.1125   0.0907
+ median snr =   6.14129877    
+ ellapsed time:               13.6900  s
+
+           6 288230399660820301                                                                                                                                                                                                                                                                                          
+ SOL   0.7835   0.4000   0.4787
+ ERR   0.0126   0.0173   0.0280
+ median snr =   22.2312908    
+ ellapsed time:               14.4400  s
+ ellapsed time:               14.9400  s

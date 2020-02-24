@@ -1,0 +1,23 @@
+&LISTA
+NDIM=3
+NOV=3
+INDV=1 2 3
+SYNTHFILE(1)='/home/meiyuw/desi_MWS_pipeline/piferre/grids/n_rdesi4-b.dat'
+SYNTHFILE(2)='/home/meiyuw/desi_MWS_pipeline/piferre/grids/n_rdesi4-r.dat'
+SYNTHFILE(3)='/home/meiyuw/desi_MWS_pipeline/piferre/grids/n_rdesi4-z.dat'
+PFILE='5605.vrd'
+FFILE='5605.frd'
+ERFILE='5605.err'
+OPFILE='5605.opf3'
+OFFILE='5605.mdl3'
+SFFILE='5605.nrd3'
+ERRBAR=1
+COVPRINT=1
+INTER=2
+ALGOR=3
+NTHREADS=4
+F_FORMAT=0
+F_ACCESS=0
+CONT=3
+NCONT=50
+ /
