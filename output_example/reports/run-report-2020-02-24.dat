@@ -1,0 +1,10 @@
+#EXPID range, today's date, date of previous run: 
+#(1) Spectra64 file name, (2) job script index, Number of: (3) total fiber counts, (4) fibers processed in previous runs, (5) fibers processed in this run, (6) new exposures, (7) new fibers with snr > min(snr), (8) new MWS targets, (9) MWS targets only? : 
+435
+-1
+20200224
+20191226
+/physics2/meiyuw/dc_test/spectra-64/56/5600/spectra-64-5600.fits  0 674 0 16 674 16 16 True
+/physics2/meiyuw/dc_test/spectra-64/56/5607/spectra-64-5607.fits  0 536 0 12 536 12 12 True
+/physics2/meiyuw/dc_test/spectra-64/56/5605/spectra-64-5605.fits  0 222 0 8 222 8 8 True
+/physics2/meiyuw/dc_test/spectra-64/56/5602/spectra-64-5602.fits  -1 68 0 0 68 0 0 True
