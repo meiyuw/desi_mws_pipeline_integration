@@ -31,8 +31,8 @@ This script reads in the latest exposure ID value from the latest report generat
   
     --whole_spectra64     The script will search and process every new exposure in the whole spectra64 directory. 
   
-                        Otherwise, it will read in pointing coordinates of new exposures from DESI db to find out
+                          Otherwise, it will read in pointing coordinates of new exposures from DESI db to find out
                         
-                        which spectra64 files with those healpix numbers have been updated.
+                          which spectra64 files with those healpix numbers have been updated.
                         
-    --allobjects          Process not just MWS targets but every other types.
+    --allobjects          Process not just MWS targets but all target types.
