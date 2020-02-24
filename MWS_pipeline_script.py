@@ -1,9 +1,9 @@
 '''
 DESI MWS pipeline intergration interface to use FERRE and rvspecfit
 2020.2.18
-Current version is only compatible with rvspecfit
-
+Current version is compatible with rvspecfit and modified piferre. 
 Author: Mei-Yu Wang
+Some of the functions are adopted from "rvsepcfit" by Sergey Koposov and "piferre" by Carlos Allende Prieto
 '''
 import pdb
 import sys
@@ -26,7 +26,7 @@ from collections import OrderedDict
 
 import matplotlib
 import astropy.io.fits as pyfits
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 import astropy.table
 from multiprocessing import cpu_count
 import astropy.table as atpy
@@ -147,11 +147,19 @@ def cal_node_n(n_proc_now,pix_list,sdir_list,nthreads_input):
     List of number of fibers to be processed by each node.
     """
     # Calculating how many fibers should be grouped for each node so that minimun run time of 10 min is reached.
-    # Assuming analysis time per fiber per processor is 20 s. Minimun asking for 10 min.
-    nthreads=int(9.5*3.0*nthreads_input) # Calculate how many fibers can be processed in 9.0 mins (0.5 min overhead)	
+    # Assuming analysis time per fiber per processor is 50 s. Minimun asking for 10 min.
+    nthreads=int(9.5*(60.0/45.0)*nthreads_input) # Calculate how many fibers can be processed in 9.5 mins (0.5 min overhead)	
+    print('nthreads=',nthreads)
     pix_list=np.array(pix_list)
     sdir_list=np.array(sdir_list)
     n_proc_now=np.array(n_proc_now)
+    sort_index=np.arange(len(pix_list))
+    
+    job_ind=np.zeros(len(pix_list),dtype=int)
+    
+    # If nothing to be processed, the job index is -1 
+    job_ind[np.array(n_proc_now==0)]=-1
+    
     if(nthreads <= 0):
         print('ERROR: n_threads=', nthreads)
         return
@@ -167,58 +175,78 @@ def cal_node_n(n_proc_now,pix_list,sdir_list,nthreads_input):
 
     pix_list=pix_list[np.argsort(n_proc_now)[::-1]]
     sdir_list=sdir_list[np.argsort(n_proc_now)[::-1]]
-    n_proc_now=n_proc_now[np.argsort(n_proc_now)[::-1]]
+    job_ind=job_ind[np.argsort(n_proc_now)[::-1]]
+    sort_index=sort_index[np.argsort(n_proc_now)[::-1]]
+    n_proc_now=n_proc_now[np.argsort(n_proc_now)[::-1]] 
+       
     n_node=np.sum(n_proc_now >= nthreads)
     pix_list_sub=pix_list[n_proc_now < nthreads]
     sdir_list_sub=sdir_list[n_proc_now < nthreads]
     n_proc_now_sub=n_proc_now[n_proc_now < nthreads]
     
+    n_empty_file=np.sum(n_proc_now_sub <= 0)
+    pix_list_sub=pix_list_sub[n_proc_now_sub > 0]
+    sdir_list_sub=sdir_list_sub[n_proc_now_sub > 0]
+    n_proc_now_sub=n_proc_now_sub[n_proc_now_sub > 0]       
+    
     pix_gp_list=[]
     sdir_gp_list=[]
     fn_sum_list=[]
     for i in range(n_node):
-        pix_gp_list.append(pix_list[i])
-        sdir_gp_list.append(sdir_list[i])
+        pix_gp_list.append([pix_list[i]])
+        sdir_gp_list.append([sdir_list[i]])
         fn_sum_list.append(n_proc_now[i])
+        job_ind[i]=i
+        
+    if(n_empty_file>0):
+        for i in range(len(job_ind)-1,len(job_ind)-n_empty_file-1,-1):
+            job_ind[i]=-1
     
     # If there are files with fiber less than nthreads
     j_t=len(n_proc_now_sub)-1
     tmp=[]
     tmp_sdir=[]
+    ind=n_node
     if(np.sum(n_proc_now < nthreads) > 0):
         for i in range(len(n_proc_now_sub)):            
             fd=0
             sum_sub=n_proc_now_sub[i]
             tmp=[pix_list_sub[i]]    
-            tmp_sdir=[sdir_list_sub[i]]           
+            tmp_sdir=[sdir_list_sub[i]]                   
             if(i < j_t):
                 for j in range(j_t,i,-1):
-                    if(sum_sub+n_proc_now_sub[j] >= nthreads):
-                        sum_sub+=n_proc_now_sub[j]
-                        tmp.append(pix_list_sub[j]) 
-                        tmp_sdir.append(sdir_list_sub[j])                        
+                    if(sum_sub+n_proc_now_sub[j] > nthreads):
+                        j+=1
                         break
-                    if(sum_sub+n_proc_now_sub[j] < nthreads):
+                    if(sum_sub+n_proc_now_sub[j] <= nthreads):
                         sum_sub+=n_proc_now_sub[j]
                         tmp.append(pix_list_sub[j])
                         tmp_sdir.append(sdir_list_sub[j])
+                        job_ind[j+n_node]=ind   
+                        job_ind[i+n_node]=ind  
                 #=== j had looped over the rest of the array or break==
                 pix_gp_list.append(tmp)
                 sdir_gp_list.append(tmp_sdir)
-                fn_sum_list.append(sum_sub)                                 
-                j_t=j-1
+                fn_sum_list.append(sum_sub)  
+                if (j <= j_t):                    
+                    j_t=j-1
+                else:
+                    job_ind[i+n_node]=ind 
+                ind += 1  
             elif(i == j_t):
                 pix_gp_list.append(tmp)
                 sdir_gp_list.append(tmp_sdir)
                 fn_sum_list.append(sum_sub)
+                job_ind[i+n_node]=ind 
                 break
             elif(i > j_t):
                 break                
             
-    return pix_gp_list,sdir_gp_list,fn_sum_list    
+    return pix_gp_list,sdir_gp_list,fn_sum_list,job_ind,sort_index   
+
 #---------------------------------------------------------------------------------
 
-def write_slurm_tot_coma(out_script_path,out_path,file_ind,sdirs,pixels,min_expid,n_fiber,nthreads=1, suffix='',whole_spectra64=False,mwonly=True):
+def write_slurm_tot(out_script_path,out_path,file_ind,in_path,sdirs,pixels,min_expid,n_fiber,nthreads=1, suffix='',whole_spectra64=False,mwonly=True):
 	"""
 	Writing Slurm script for both rvspecfit and ferre.
 	---------------
@@ -274,16 +302,16 @@ def write_slurm_tot_coma(out_script_path,out_path,file_ind,sdirs,pixels,min_expi
 	except:
 		host='Unknown'
 	
-	# Calculate the requested runtime. Assuming analysis time per fiber per processor is 20 s.
-	# Minimun asking for 10 min, and adding additional 10 min each time when more runtime is needed.
+	# Calculate the requested runtime. Assuming analysis time per fiber per processor is 45 s.
+	# Minimun asking for 10 min, and adding additional 5 min each time when more runtime is needed.
 	if (n_fiber > 0):
-		runtime=20.0*math.ceil(n_fiber/nthreads) # in second. 
-		rt_10m=math.ceil(runtime/(10.0*60.0))
-		rt_hr=rt_10m//6
-		rt_min=int((rt_10m%6)*10)
+            runtime=45.0*np.ceil(n_fiber/nthreads) # in second.
+            rt_5m=np.ceil(runtime/(5.0*60.0))
+            rt_hr=int(rt_5m//12)
+            rt_min=max(int((rt_5m%12)*5),10)
 	else:
-		rt_min=10
-		rt_hr=0
+            print('No fibers need to be processed...')
+            return
 	
 	f=open(os.path.join(out_script_path,now,suffix+'.slurm'),'w')
 	f.write("#!/bin/bash \n")
@@ -296,7 +324,6 @@ def write_slurm_tot_coma(out_script_path,out_path,file_ind,sdirs,pixels,min_expi
 	f.write("#SBATCH -C haswell \n")
 	f.write("#SBATCH -a 0-31 \n")
 	f.write("#SBATCH -A desi \n")
-	f.write("###-A m1727\n")
 	f.write("#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-# \n")
 	f.write("export OMP_NUM_THREADS=1 \n")
 	f.write("source "+os.environ['DESI_MWS_root']+"/setup.sh \n")
@@ -310,21 +337,30 @@ def write_slurm_tot_coma(out_script_path,out_path,file_ind,sdirs,pixels,min_expi
 		f.write(" --allobjects ")
 	f.write("--minexpid="+str(int(min_expid)))
 	f.write(""+"\n")
-	#if (whole_spectra64):
-	#	# Add piferre commands
-	#	f.write("wait \n")
-	#	f.write("cd "+os.environ['DESI_MWS_root']+"/piferre \n")
-	#	f.write("python piferre.py --input_files "+out_script_path+"/x."+file_ind+"\n")
-	#	f.write("wait \n")
-	#	for sdir,pixel in zip(sdirs,pixels):
-	#		f.write("sbatch "+os.path.join(out_script_path,sdir,pixel,pixel)+".slurm")
-	f.write("\n")
+	# Add piferre commands if zbest files do not exist
+	
+	zf=[]
+	for pixel,sdir in zip(pixels,sdirs):
+		input_path=os.path.join(in_path,sdir,pixel)
+		zf.append(glob.glob(input_path+"/zbest-64-"+str(pixel)+".fits"))
+
+	if(len(zf) != len(pixels)):
+		f.write("wait \n")
+		f.write("cd "+os.environ['DESI_MWS_root']+"/piferre \n")
+		f.write("python piferre.py --input_files "+os.path.join(out_script_path,now)+"/x."+file_ind+" ")
+		f.write(" --output_script_dir "+out_script_path+" ")	
+		f.write(" --output_dir "+out_path+" ")
+		if (not mwonly):
+			f.write(" --allobjects ")
+		f.write("--minexpid="+str(int(min_expid)))
+		f.write("\n")
+
 	f.close()
 	os.chmod(os.path.join(out_script_path,now,suffix+'.slurm'),0o755)
 	return None    
 	
 #---------------------------------------------------------------------------------    
-def write_script_tot_gp_coma(out_script_path,out_path,pixels,sdirs,file_ind,nthreads=1, suffix='',whole_spectra64=False):
+def write_script_tot_gp(out_script_path,out_path,in_path,sdirs,pixels,file_ind,min_expid,nthreads=1, suffix='',mwonly=False):
 	"""
 	Writing shell script to excute job submission.
 	"""
@@ -332,19 +368,43 @@ def write_script_tot_gp_coma(out_script_path,out_path,pixels,sdirs,file_ind,nthr
 	month=datetime.date.today().month
 	day=datetime.date.today().day
 	now=str(yr*10000+month*100+day)
+
 	
+	zf=[]
+	for pixel,sdir in zip(pixels,sdirs):
+		input_path=os.path.join(in_path,sdir,pixel)
+		zf.append(glob.glob(input_path+"/zbest-64-"+str(pixel)+".fits"))
+		
+	# If zbest files do not exisit, submitting pyferre jobs after rvspecfit is done			
 	f=open(os.path.join(out_script_path,now,suffix+'.sh'),'w')
 	f.write("#!/bin/bash \n")
-	f.write("one=$(sbatch "+os.path.join(out_script_path,now,suffix)+".slurm | cut -f 4 -d' ') \n")
-	f.write("echo $one \n")
-	
-	# Submitting pyferre jobs after rvspecfit is done
-	#if(whole_spectra64):
-	#	for pixel_gp,sdir_gp in zip(pixels,sdirs):
-	#		for pixel,sdir in zip(pixel_gp,sdir_gp):
-	#			f.write(str(pixel)+"=$(sbatch --dependency=afterany:$one "+os.path.join(out_script_path,now,sdir,pixel,pixel)+".slurm) \n")
-	#			f.write("echo $"+str(pixel)+" \n")
-	#	f.close()
+	if(len(zf) == len(pixels)):
+		f.write("one=$(sbatch "+os.path.join(out_script_path,now,suffix)+".slurm) \n")
+	else:
+		f.write("one=$(sbatch "+os.path.join(out_script_path,now,suffix)+".slurm | cut -f 4 -d' ') \n")
+		
+	f.write("echo $one \n")	
+
+	if(len(zf) == len(pixels)):
+		f.write("wait \n")
+		f.write("cd "+os.environ['DESI_MWS_root']+"/piferre \n")
+		f.write("python piferre.py --input_files "+os.path.join(out_script_path,now)+"/x."+file_ind+" ")
+		f.write(" --output_script_dir "+out_script_path+" ")	
+		f.write(" --output_dir "+out_path+" ")
+		if (not mwonly):
+			f.write(" --allobjects ")
+		f.write("--minexpid="+str(int(min_expid)))
+		f.write("\n")
+		f.write("wait \n")	
+		
+	for pixel,sdir in zip(pixels,sdirs):
+
+		if(len(zf) == len(pixels)):
+			f.write("j"+str(pixel)+"=$(sbatch "+os.path.join(out_script_path,now,sdir,pixel,pixel)+".slurm) \n")
+		else:
+			f.write("j"+str(pixel)+"=$(sbatch --dependency=afterany:$one "+os.path.join(out_script_path,now,sdir,pixel,pixel)+".slurm) \n")
+		f.write("echo $j"+str(pixel)+" \n")
+	f.close()
 	os.chmod(os.path.join(out_script_path,now,suffix+'.sh'),0o755)
 	return None        
 	
@@ -366,12 +426,13 @@ def getpixels(root):
         sdirs.append(x) #keep only the first layer 
 
   return sdirs,pixels
+  
+
 #---------------------------------------------------------------------------------    
 def run_scripts(path):
 	print('run_scripts(path):',path)
 	o=glob.glob(path+"/*.sh")
 	for cmd in o:
-		#script_path, slurm_f = os.path.split(cmd)
 		job="sh "+cmd
 		print('jobs=',job)
 		err=subprocess.call(job,shell=True)
@@ -395,9 +456,12 @@ def check_latest_report(path):
 	prev_date:int
 	The date of previous run.
     """
-	
     root=os.path.join(path,'run-report-')
     report_files=sorted(glob.glob(root+"*.dat"))
+
+    if(len(report_files)==0):
+        print('No Previous Run Report....')
+        return 'Nane', -1,20000000
 	
     dates=[]
     for i in report_files:
@@ -472,8 +536,8 @@ def desi_db_new_exposure(prev_date,one_day=False):
 	return pix_list,n_points,last_expid
 	
 #---------------------------------------------------------------------------------	
-def generate_reports(report_dir,input_path,out_path,mwonly,last_expid,prev_date,whole_spectra64):
-	"""
+def check_spectra64(report_dir,input_path,out_path,mwonly,last_expid,prev_date,whole_spectra64):
+    """
     Access the desi database and retrive coordinates of new exposures to figure out which spectra64 files are updated.
     A run report will be generated to indicate which spectra64 and how many fibers will be ran during this run.
     This report doesn't show which runs are successful and which are not, but it will check how many fibers were processed (via rvtab files).
@@ -501,74 +565,127 @@ def generate_reports(report_dir,input_path,out_path,mwonly,last_expid,prev_date,
     whole_spectra64: boolean
     Processing the whole spectra64 folder or not.
     
-	"""
+    """
+    #=== If not processing the whole spectra64 directory, reading in information about new exposures from DESI db ===#
+    if(not whole_spectra64):
+        pix_list,n_points,last_expid=desi_db_new_exposure(prev_date)
+        sdir_list=[i[:-2] for i in pix_list]
+    else:
+        sdir_list,pix_list=getpixels(input_path)
+        n_points=1
+	
+    n_p_proc=np.zeros(len(pix_list),dtype=int)
+    n_proc=np.zeros(len(pix_list),dtype=int)
+    n_proc_now=np.zeros(len(pix_list),dtype=int)
+    n_EXPrange=np.zeros(len(pix_list),dtype=int)
+    n_MWS_target=np.zeros(len(pix_list),dtype=int)
+    n_minsn=np.zeros(len(pix_list),dtype=int)
+    tot_exp=np.zeros(len(pix_list),dtype=int)	
+	
+    #------ Finding the new largest EXPID and checking how many new fibers need to be processed ------- 
+    max_expid=0
+    for i,pixel in enumerate(pix_list):
+        sdir=sdir_list[i]
+        fname_p=out_path+'/'+str(sdir)+'/'+str(pixel)+'/'+'rvtab-64-'+str(pixel)+'.fits'
+        if os.path.exists(fname_p):
+            fm = pyfits.getdata(fname_p, 'FIBERMAP')
+            n_p_proc[i]=len(fm["EXPID"]) 
+        else:
+            n_p_proc[i]=0
+        fname=input_path+'/'+str(sdir)+'/'+str(pixel)+"/spectra-64-"+str(pixel)+".fits"
+        fibermap = pyfits.getdata(fname, 'FIBERMAP')
+        expids = np.array(fibermap["EXPID"])
+        fluxes, ivars, masks, waves = read_data(fname)
+        sns = dict([(_, get_sns(fluxes[_], ivars[_], masks[_])) for _ in 'brz'])
+        mask,n_EXPrange_t, n_MWS_target_t, n_minsn_t, n_proc_t = select_fibers_to_fit(fibermap,sns,mwonly=mwonly,expid_range=(last_expid, np.inf))
+        n_proc[i]=n_proc_t
+        n_proc_now[i]=np.sum(mask)
+        n_EXPrange[i]=n_EXPrange_t
+        n_MWS_target[i]=n_MWS_target_t
+        n_minsn[i]=n_minsn_t
+        tot_exp[i]=len(expids)
+        if (np.max(expids) > max_expid):
+            max_expid=np.max(expids)
+        if(i ==0):
+            min_expid=np.min(expids)
+        else:
+            if(np.min(expids) < min_expid):
+                min_expid=np.min(expids)
+    
+    print('EXP ID range:',min_expid,max_expid)
+    expid_range=[last_expid,max_expid]
+    mwonly_list=[mwonly for i in range(len(tot_exp))]
+    report_data=np.column_stack((np.array(sdir_list),np.array(pix_list),tot_exp,n_proc_now,n_EXPrange,n_MWS_target,n_minsn,mwonly_list,n_p_proc))
+    return n_proc_now, pix_list,sdir_list,expid_range,prev_date,report_data
+	
+#---------------------------------------------------------------------------------	
+def generate_reports(input_path,report_dir,expid_range,prev_date,report_data,job_ind,sort_index):
+    """
+    Access the desi database and retrive coordinates of new exposures to figure out which spectra64 files are updated.
+    A run report will be generated to indicate which spectra64 and how many fibers will be ran during this run.
+    This report doesn't show which runs are successful and which are not, but it will check how many fibers were processed (via rvtab files).
+    
+    Input:
+    
+    report_dir: string
+    Directory where the reports are stored.
+    
+    input_path: string
+    Directory where the spectra64 files are stored.
+    
+    outpath: string
+    Directory where the MWS output files are stored.
+    
+    mwonly: boolean
+    Whether fit all objects or only MW_TARGET.
+    
+    last_expid: int
+    The largest exposure ID value to date reading in from previous reports.
+    
+    prev_date: int
+    The date of previous run.
+    
+    whole_spectra64: boolean
+    Processing the whole spectra64 folder or not.
+    
+    """
+    report_data=report_data[sort_index,:]
+    sdir_list=report_data[:,0]
+    pix_list=report_data[:,1]
+    tot_exp=report_data[:,2]
+    n_proc_now=report_data[:,3]
+    n_EXPrange=report_data[:,4]
+    n_MWS_target=report_data[:,5]
+    n_minsn=report_data[:,6]
+    mwonly_list=report_data[:,7]
+    n_proc_p=report_data[:,8]
 		
-	#=== If not processing the whole spectra64 directory, reading in information about new exposures from DESI db ===#
-	if(not whole_spectra64):
-		pix_list,n_points,last_expid=desi_db_new_exposure(prev_date)
-		sdirs=[i[:-2] for i in pix_list]
-	else:
-		sdirs,pix_list=getpixels(input_path)
-		n_points=1
-		last_expid=0
+    min_expid=expid_range[0]		
+    max_expid=expid_range[1]
+    d1 = datetime.date.today()
+    rp_output = open(report_dir+"/run-report-"+str(d1)+".dat","w")
+    date_tmp=str(d1).split('-')
+    day=int(date_tmp[2])
+    today_date=int(date_tmp[0])*10000+int(date_tmp[1])*100+day
+    rp_output.writelines('#EXPID range, today\'s date, date of previous run: \n')
+    rp_output.writelines('#(1) Spectra64 file name, (2) job script index, Number of: (3) total fiber counts, (4) fibers processed in previous runs, (5) fibers processed in this run, (6) new exposures, (7) new fibers with snr > min(snr), (8) new MWS targets, (9) MWS targets only? : \n')	
+    rp_output.writelines(str(max_expid))
+    rp_output.writelines('\n')
+    rp_output.writelines(str(min_expid))		
+    rp_output.writelines('\n')
+    rp_output.writelines(str(today_date))
+    rp_output.writelines('\n')	
+    rp_output.writelines(str(prev_date))	
+    rp_output.writelines('\n')
+    for i,entry in enumerate(pix_list):
+        pixel=entry
+        sdir=sdir_list[i]
+        rp_output.writelines(input_path+'/'+str(sdir)+'/'+str(pixel)+"/spectra-64-"+str(pixel)+".fits "+" "+str(job_ind[i])+" "+str(int(tot_exp[i]))+" "+str(int(n_proc_p[i]))+" "+str(int(n_proc_now[i])))
+        rp_output.writelines(" "+str(int(n_EXPrange[i]))+" "+str(int(n_minsn[i]))+" "+str(int(n_MWS_target[i]))+" "+str(mwonly_list[i]))
+        rp_output.writelines('\n')
+    rp_output.close()
 	
-	n_p_proc=np.zeros(len(pix_list))
-	n_proc=np.zeros(len(pix_list))
-	n_proc_now=np.zeros(len(pix_list))
-	n_EXPrange=np.zeros(len(pix_list))
-	n_MWS_targe=np.zeros(len(pix_list))
-	n_minsn=np.zeros(len(pix_list))
-	tot_exp=np.zeros(len(pix_list))	
-	
-	#------ Finding the new largest EXPID and checking how many new fibers need to be processed ------- 
-	max_expid=0
-	for i,pixel in enumerate(pix_list):
-		sdir=sdirs[i]
-		fname_p=out_path+'/'+str(sdir)+'/'+str(pixel)+'/'+'rvtab-64-'+str(pixel)+'.fits'
-		if os.path.exists(fname_p):
-			fm = pyfits.getdata(fname_p, 'FIBERMAP')
-			n_p_proc[i]=len(fm["EXPID"]) 
-		else:
-			n_p_proc[i]=0
-		fname=input_path+'/'+str(sdir)+'/'+str(pixel)+"/spectra-64-"+str(pixel)+".fits"		
-		fibermap = pyfits.getdata(fname, 'FIBERMAP')
-		expids = np.array(fibermap["EXPID"])
-		fluxes, ivars, masks, waves = read_data(fname)
-		sns = dict([(_, get_sns(fluxes[_], ivars[_], masks[_])) for _ in 'brz'])
-		mask,n_EXPrange_t, n_MWS_targe_t, n_minsn_t, n_proc_t = select_fibers_to_fit(fibermap,sns,mwonly=mwonly,expid_range=(last_expid, np.inf))
-		n_proc[i]=n_proc_t
-		n_proc_now[i]=np.sum(mask)
-		n_EXPrange[i]=n_EXPrange_t
-		n_MWS_targe[i]=n_MWS_targe_t
-		n_minsn[i]=n_minsn_t
-		tot_exp[i]=len(expids)
-		if (np.max(expids) > max_expid):
-			max_expid=np.max(expids)
-	
-	d1 = datetime.date.today()
-	rp_output = open(report_dir+"/run-report-"+str(d1)+".dat","w")
-	date_tmp=str(d1).split('-')
-	day=int(date_tmp[2])
-	today_date=int(date_tmp[0])*10000+int(date_tmp[1])*100+day
-	rp_output.writelines('#EXPID range, today\'s date, date of previous run: \n')
-	rp_output.writelines('#(1) Spectra64 file name, Number of: (2) total fiber counts, (3) fibers processed in this run, (4) new exposures, (5) new MWS targets, (6) new fibers with snr > min(snr), (7) MWS targets only? : \n')	
-	rp_output.writelines(str(max_expid))
-	rp_output.writelines('\n')
-	rp_output.writelines(str(last_expid+1))		
-	rp_output.writelines('\n')
-	rp_output.writelines(str(today_date))
-	rp_output.writelines('\n')	
-	rp_output.writelines(str(prev_date))	
-	rp_output.writelines('\n')
-	for i,entry in enumerate(pix_list):
-		pixel=entry
-		sdir=sdirs[i]
-		rp_output.writelines(out_path+'/'+str(sdir)+'/'+str(pixel)+"/spectra-64-"+str(pixel)+".fits "+" "+str(int(tot_exp[i]))+" "+str(int(n_proc_now[i])))
-		rp_output.writelines(" "+str(int(n_EXPrange[i]))+" "+str(int(n_MWS_targe[i]))+" "+str(int(n_minsn[i]))+" "+str(mwonly))
-		rp_output.writelines('\n')
-	rp_output.close()
-	
-	return n_proc_now, pix_list,sdirs
+    return None 
 #---------------------------------------------------------------------------------    
 def proc_mws(args):
     """
@@ -645,8 +762,8 @@ def proc_mws(args):
     latest_report,last_expid, prev_date=check_latest_report(report_dir)
     print('Reading in latest report:',latest_report)
     print('Previous largest expid:',last_expid)
-    n_proc_now, pix_list,sdir_list=generate_reports(report_dir,path,out_path,mwonly,last_expid,prev_date,whole_spectra64) 
-    min_expid=last_expid+1
+    n_proc_now, pix_list,sdir_list,expid_range,prev_date,report_data=check_spectra64(report_dir,path,out_path,mwonly,last_expid,prev_date,whole_spectra64) 
+    min_expid=last_expid
     
     #== Store all the scripts in a folder named with Today's date
     yr= datetime.date.today().year
@@ -665,16 +782,12 @@ def proc_mws(args):
     	if not os.path.exists(os.path.join(out_path,sdir,pixel)): os.mkdir(os.path.join(out_path,sdir,pixel))
 
     # Determining how many jobs to be submitted 
-    if(not whole_spectra64):
-    	pix_gp_list,sdir_gp_list,fn_sum_list=cal_node_n(n_proc_now,pix_list,sdir_list,nthreads)
-    else:
-    	pix_gp_list=[[i] for i in pix_list]
-    	sdir_gp_list=[[i] for i in sdir_list]
-    	fn_sum_list=[i for i in n_proc_now]	
+    pix_gp_list,sdir_gp_list,fn_sum_list,job_ind,sort_index=cal_node_n(n_proc_now,pix_list,sdir_list,nthreads)
+    generate_reports(path,report_dir,expid_range,prev_date,report_data,job_ind,sort_index)	
     
     #== Writing slurm scripts and lists of input files (x.xxx) for each job (group jobs according to fiber numbers and processors per node)
     n_node=len(pix_gp_list) # requested node number = pixel group number
-    print('Number of jobs to be submitted:',n_node)
+    print('Number of jobs to be submitted:',n_node+len(pix_list))
     for i in range(n_node):   	
     	file_ind=str(1000+i)[1:]
     	
@@ -687,19 +800,17 @@ def proc_mws(args):
     		f.write(entry+"/spectra-64-"+str(pixel)+".fits \n")
     		#print(entry+"/spectra-64-"+str(pixel)+".fits")
     	f.close()
-    	suffix='rvspecfit_'+file_ind
+    	suffix='rvspecfit_'+file_ind 
     		
     	#== Generating slurm scripts
     	n_fiber=fn_sum_list[i]
-    	write_slurm_tot_coma(out_script_path,out_path,file_ind,sdir_gp_list[i],pix_gp_list[i],min_expid,n_fiber,nthreads, suffix,whole_spectra64,mwonly)
-    	#if(whole_spectra64):
-    	#	for i,pixel in enumerate(pix_list):    		    		
-    	#		sdir=sdir_list[i]
-    	#		cmd="python3 -c \"import sys; sys.path.insert(0, '"+python_path+ \
-    	#			"'); from piferre import write_slurm; write_slurm(\'"+\
-    	#			str(pixel)+"\', path='"+os.path.join(out_script_path,sdir,pixel)+"', ngrids=9, nthreads=4)\"\n"
-    	#		err=subprocess.call(cmd,shell=True)    		   		
-    	write_script_tot_gp_coma(os.path.join(out_script_path),out_path,pix_gp_list,sdir_gp_list,file_ind,nthreads, suffix, whole_spectra64)
+    	write_slurm_tot(out_script_path,out_path,file_ind,path,sdir_gp_list[i],pix_gp_list[i],min_expid,n_fiber,nthreads, suffix,whole_spectra64,mwonly)
+    	for sdir,pixel in zip(sdir_list,pix_list):
+    		cmd="python3 -c \"import sys; sys.path.insert(0, '"+python_path+"'); from piferre import write_slurm; write_slurm(\'"+str(sdir)+"\',\'"+str(pixel)+"\',\'"+str(out_path)+"\', script_path='"+os.path.join(out_script_path,now)+"', ngrids=9, nthreads=4)\"\n"
+    		#print('cmd=',cmd)
+    		err=subprocess.call(cmd,shell=True)
+    		   		
+    	write_script_tot_gp(os.path.join(out_script_path),out_path,path,sdir_gp_list[i],pix_gp_list[i],file_ind,min_expid,nthreads=nthreads, suffix=suffix, mwonly=mwonly)
     		
     #== Executing the shell script and submitting jobs	
     run_scripts(os.path.join(out_script_path,now))
@@ -708,7 +819,3 @@ def proc_mws(args):
 if __name__ == "__main__":
 
 	proc_mws(sys.argv[1:])
-  
-
-
-
