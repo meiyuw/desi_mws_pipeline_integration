@@ -1,7 +1,7 @@
 '''
 DESI MWS pipeline intergration interface to use FERRE and rvspecfit
 2020.2.18
-Current version is compatible with rvspecfit and modified piferre. 
+Current version is only compatible with rvspecfit
 Author: Mei-Yu Wang
 Some of the functions are adopted from "rvsepcfit" by Sergey Koposov and "piferre" by Carlos Allende Prieto
 '''
@@ -147,8 +147,8 @@ def cal_node_n(n_proc_now,pix_list,sdir_list,nthreads_input):
     List of number of fibers to be processed by each node.
     """
     # Calculating how many fibers should be grouped for each node so that minimun run time of 10 min is reached.
-    # Assuming analysis time per fiber per processor is 50 s. Minimun asking for 10 min.
-    nthreads=int(9.5*(60.0/45.0)*nthreads_input) # Calculate how many fibers can be processed in 9.5 mins (0.5 min overhead)	
+    # Assuming analysis time per fiber per processor is 55 s for rvspecfit. Minimun asking for 10 min.
+    nthreads=int(9.5*(60.0/55.0)*nthreads_input) # Calculate how many fibers can be processed in 9.5 mins (0.5 min overhead)	
     print('nthreads=',nthreads)
     pix_list=np.array(pix_list)
     sdir_list=np.array(sdir_list)
@@ -246,7 +246,7 @@ def cal_node_n(n_proc_now,pix_list,sdir_list,nthreads_input):
 
 #---------------------------------------------------------------------------------
 
-def write_slurm_tot(out_script_path,out_path,file_ind,in_path,sdirs,pixels,min_expid,n_fiber,nthreads=1, suffix='',whole_spectra64=False,mwonly=True):
+def write_slurm_tot(out_script_path,out_path,file_ind,in_path,sdirs,pixels,now,min_expid,n_fiber,nthreads=1, suffix='',whole_spectra64=False,mwonly=True):
 	"""
 	Writing Slurm script for both rvspecfit and ferre.
 	---------------
@@ -291,10 +291,8 @@ def write_slurm_tot(out_script_path,out_path,file_ind,in_path,sdirs,pixels,min_e
 	Output:
 	None.
 	"""
-	yr= datetime.date.today().year
-	month=datetime.date.today().month
-	day=datetime.date.today().day
-	now=str(yr*10000+month*100+day)
+        #time_now = datetime.datetime.now()
+	#now=str(time_now.year*10000+time_now.month*100+time_now.day)+'-'+str(100+now.hour)[1:]+str(100+now.minute)[1:]
 	
 	if not os.path.exists(os.path.join(out_script_path,now)): os.mkdir(os.path.join(out_script_path,now))
 	try:
@@ -302,13 +300,16 @@ def write_slurm_tot(out_script_path,out_path,file_ind,in_path,sdirs,pixels,min_e
 	except:
 		host='Unknown'
 	
-	# Calculate the requested runtime. Assuming analysis time per fiber per processor is 45 s.
+	# Calculate the requested runtime. Assuming analysis time per fiber per processor is 55 s.
 	# Minimun asking for 10 min, and adding additional 5 min each time when more runtime is needed.
 	if (n_fiber > 0):
-            runtime=45.0*np.ceil(n_fiber/nthreads) # in second.
+            runtime=55.0*np.ceil(n_fiber/nthreads) # in second.
             rt_5m=np.ceil(runtime/(5.0*60.0))
             rt_hr=int(rt_5m//12)
-            rt_min=max(int((rt_5m%12)*5),10)
+            if(rt_hr == 0):
+                rt_min=max(int((rt_5m%12)*5),10)
+            else:
+                rt_min=int((rt_5m%12)*5)
 	else:
             print('No fibers need to be processed...')
             return
@@ -318,11 +319,12 @@ def write_slurm_tot(out_script_path,out_path,file_ind,in_path,sdirs,pixels,min_e
 	f.write("#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-# \n")
 	f.write("#SBATCH -N 1       \n")
 	f.write("#SBATCH -n "+str(nthreads)+"       \n")
-	f.write("#SBATCH -t "+str(rt_hr)+":"+str(rt_min)+":00 \n")
+	f.write("#SBATCH -t "+str(rt_hr)+":"+str(100+rt_min)[1:]+":00 \n")
+	f.write("#SBATCH -o rvspecfit_"+str(file_ind)+".o%j \n")
+	f.write("#SBATCH -e rvspecfit_"+str(file_ind)+".e%j \n")
 	f.write("#SBATCH -p regular \n")
 	f.write("#SBATCH -L SCRATCH \n")
 	f.write("#SBATCH -C haswell \n")
-	f.write("#SBATCH -a 0-31 \n")
 	f.write("#SBATCH -A desi \n")
 	f.write("#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-# \n")
 	f.write("export OMP_NUM_THREADS=1 \n")
@@ -360,53 +362,49 @@ def write_slurm_tot(out_script_path,out_path,file_ind,in_path,sdirs,pixels,min_e
 	return None    
 	
 #---------------------------------------------------------------------------------    
-def write_script_tot_gp(out_script_path,out_path,in_path,sdirs,pixels,file_ind,min_expid,nthreads=1, suffix='',mwonly=False):
-	"""
-	Writing shell script to excute job submission.
-	"""
-	yr= datetime.date.today().year
-	month=datetime.date.today().month
-	day=datetime.date.today().day
-	now=str(yr*10000+month*100+day)
-
-	
-	zf=[]
-	for pixel,sdir in zip(pixels,sdirs):
-		input_path=os.path.join(in_path,sdir,pixel)
-		zf.append(glob.glob(input_path+"/zbest-64-"+str(pixel)+".fits"))
+def write_script_tot_gp(out_script_path,out_path,in_path,sdirs,pixels,now,file_ind,min_expid,nthreads=1, suffix='',mwonly=False):
+    """
+    Writing shell script to excute job submission.
+    """
+    zf=[]
+    for pixel,sdir in zip(pixels,sdirs):
+        input_path=os.path.join(in_path,sdir,pixel)
+        files=os.listdir(input_path)
+        for filename in files:
+            if (filename.find('zbest-64') > -1 and filename.find('.fits') > -1):
+                zf.append(glob.glob(input_path+"/zbest-64-"+str(pixel)+".fits"))
+                
+    # If zbest files do not exisit, submitting pyferre jobs after rvspecfit is done			
+    f=open(os.path.join(out_script_path,now,suffix+'.sh'),'w')
+    f.write("#!/bin/bash \n")
+    if(len(zf) == len(pixels)):
+        f.write("one=$(sbatch "+os.path.join(out_script_path,now,suffix)+".slurm) \n")
+    else:
+        f.write("one=$(sbatch "+os.path.join(out_script_path,now,suffix)+".slurm | cut -f 4 -d' ') \n")
 		
-	# If zbest files do not exisit, submitting pyferre jobs after rvspecfit is done			
-	f=open(os.path.join(out_script_path,now,suffix+'.sh'),'w')
-	f.write("#!/bin/bash \n")
-	if(len(zf) == len(pixels)):
-		f.write("one=$(sbatch "+os.path.join(out_script_path,now,suffix)+".slurm) \n")
-	else:
-		f.write("one=$(sbatch "+os.path.join(out_script_path,now,suffix)+".slurm | cut -f 4 -d' ') \n")
-		
-	f.write("echo $one \n")	
+    f.write("echo $one \n")	
 
-	if(len(zf) == len(pixels)):
-		f.write("wait \n")
-		f.write("cd "+os.environ['DESI_MWS_root']+"/piferre \n")
-		f.write("python piferre.py --input_files "+os.path.join(out_script_path,now)+"/x."+file_ind+" ")
-		f.write(" --output_script_dir "+out_script_path+" ")	
-		f.write(" --output_dir "+out_path+" ")
-		if (not mwonly):
-			f.write(" --allobjects ")
-		f.write("--minexpid="+str(int(min_expid)))
-		f.write("\n")
-		f.write("wait \n")	
+    if(len(zf) == len(pixels)):
+        f.write("wait \n")
+        f.write("cd "+os.environ['DESI_MWS_root']+"/piferre \n")
+        f.write("python piferre.py --input_files "+os.path.join(out_script_path,now)+"/x."+file_ind+" ")
+        f.write(" --output_script_dir "+out_script_path+" ")
+        f.write(" --output_dir "+out_path+" ")
+        if (not mwonly):
+            f.write(" --allobjects ")
+        f.write("--minexpid="+str(int(min_expid)))
+        f.write("\n")
+        f.write("wait \n")	
 		
-	for pixel,sdir in zip(pixels,sdirs):
-
-		if(len(zf) == len(pixels)):
-			f.write("j"+str(pixel)+"=$(sbatch "+os.path.join(out_script_path,now,sdir,pixel,pixel)+".slurm) \n")
-		else:
-			f.write("j"+str(pixel)+"=$(sbatch --dependency=afterany:$one "+os.path.join(out_script_path,now,sdir,pixel,pixel)+".slurm) \n")
-		f.write("echo $j"+str(pixel)+" \n")
-	f.close()
-	os.chmod(os.path.join(out_script_path,now,suffix+'.sh'),0o755)
-	return None        
+    for pixel,sdir in zip(pixels,sdirs):
+        if(len(zf) == len(pixels)):
+            f.write("j"+str(pixel)+"=$(sbatch "+os.path.join(out_script_path,now,sdir,pixel,pixel)+".slurm) \n")
+        else:
+            f.write("j"+str(pixel)+"=$(sbatch --dependency=afterany:$one "+os.path.join(out_script_path,now,sdir,pixel,pixel)+".slurm) \n")
+        f.write("echo $j"+str(pixel)+" \n")
+    f.close()
+    os.chmod(os.path.join(out_script_path,now,suffix+'.sh'),0o755)
+    return None        
 	
 #---------------------------------------------------------------------------------  
 def getpixels(root):
@@ -427,7 +425,16 @@ def getpixels(root):
 
   return sdirs,pixels
   
+def getpixels_onelayer(root,subfolder):
+#find all pixels in 'root' directory (spectra-64)
+    d1=os.listdir(root+'/'+subfolder)
+    sdirs=[]
+    pixels=[]
+    for x in d1:
+        pixels.append(x)
+        sdirs.append(subfolder)
 
+    return sdirs,pixels
 #---------------------------------------------------------------------------------    
 def run_scripts(path):
 	print('run_scripts(path):',path)
@@ -466,8 +473,8 @@ def check_latest_report(path):
     dates=[]
     for i in report_files:
         date_tmp=i.split('-')
-        day=int(date_tmp[4].split('.')[0])
-        one_date=int(date_tmp[2])*10000+int(date_tmp[3])*100+day
+        min_sec=int(date_tmp[3].split('.')[0])
+        one_date=int(date_tmp[2])*10000+int(min_sec)
         dates.append(one_date)
     dates=np.array(dates)
     file_rp = open(report_files[np.where(dates==np.max(dates))[0][0]],"r")
@@ -536,7 +543,7 @@ def desi_db_new_exposure(prev_date,one_day=False):
 	return pix_list,n_points,last_expid
 	
 #---------------------------------------------------------------------------------	
-def check_spectra64(report_dir,input_path,out_path,mwonly,last_expid,prev_date,whole_spectra64):
+def check_spectra64(report_dir,input_path,out_path,mwonly,last_expid,prev_date,whole_spectra64,commissioning=None):
     """
     Access the desi database and retrive coordinates of new exposures to figure out which spectra64 files are updated.
     A run report will be generated to indicate which spectra64 and how many fibers will be ran during this run.
@@ -571,8 +578,13 @@ def check_spectra64(report_dir,input_path,out_path,mwonly,last_expid,prev_date,w
         pix_list,n_points,last_expid=desi_db_new_exposure(prev_date)
         sdir_list=[i[:-2] for i in pix_list]
     else:
-        sdir_list,pix_list=getpixels(input_path)
-        n_points=1
+        if(commissioning != None):
+            sdir_list,pix_list=getpixels_onelayer(input_path,commissioning)
+            #print('sdir_list=',sdir_list)
+            #print('pix_list=',pix_list)
+        else:    
+            sdir_list,pix_list=getpixels(input_path)
+            n_points=1
 	
     n_p_proc=np.zeros(len(pix_list),dtype=int)
     n_proc=np.zeros(len(pix_list),dtype=int)
@@ -662,11 +674,13 @@ def generate_reports(input_path,report_dir,expid_range,prev_date,report_data,job
 		
     min_expid=expid_range[0]		
     max_expid=expid_range[1]
-    d1 = datetime.date.today()
+    time_now = datetime.datetime.now()
+    d1=str(time_now.year*10000+time_now.month*100+time_now.day)+'-'+str(100+time_now.hour)[1:]+str(100+time_now.minute)[1:]
+    #d1 = datetime.date.today()
     rp_output = open(report_dir+"/run-report-"+str(d1)+".dat","w")
-    date_tmp=str(d1).split('-')
-    day=int(date_tmp[2])
-    today_date=int(date_tmp[0])*10000+int(date_tmp[1])*100+day
+    #date_tmp=str(d1).split('-')
+    #day=time_now.day
+    today_date=int(time_now.year)*10000+int(time_now.month)*100+time_now.day
     rp_output.writelines('#EXPID range, today\'s date, date of previous run: \n')
     rp_output.writelines('#(1) Spectra64 file name, (2) job script index, Number of: (3) total fiber counts, (4) fibers processed in previous runs, (5) fibers processed in this run, (6) new exposures, (7) new fibers with snr > min(snr), (8) new MWS targets, (9) MWS targets only? : \n')	
     rp_output.writelines(str(max_expid))
@@ -722,6 +736,13 @@ def proc_mws(args):
         type=str,
         default=None,
         required=True)
+    
+    parser.add_argument(
+        '--commissioning_folder',
+        help='The folder (named by date) that stores commissioning data',
+        type=str,
+        default=None,
+        required=False)
         
     parser.add_argument(
         '--report_dir',
@@ -751,6 +772,7 @@ def proc_mws(args):
     out_path = args.output_dir
     out_script_path = args.output_script_dir
     nthreads = args.nthreads
+    commissioning=args.commissioning_folder
     
     config_path=os.environ['rvspecfit_config']+"/config.yaml"
     python_path=os.environ['DESI_MWS_root']+"/piferre"
@@ -762,16 +784,18 @@ def proc_mws(args):
     latest_report,last_expid, prev_date=check_latest_report(report_dir)
     print('Reading in latest report:',latest_report)
     print('Previous largest expid:',last_expid)
-    n_proc_now, pix_list,sdir_list,expid_range,prev_date,report_data=check_spectra64(report_dir,path,out_path,mwonly,last_expid,prev_date,whole_spectra64) 
+    n_proc_now, pix_list,sdir_list,expid_range,prev_date,report_data=check_spectra64(report_dir,path,out_path,mwonly,last_expid,prev_date,whole_spectra64,commissioning) 
     min_expid=last_expid
     
     #== Store all the scripts in a folder named with Today's date
-    yr= datetime.date.today().year
-    month=datetime.date.today().month
-    day=datetime.date.today().day
-    now=str(yr*10000+month*100+day)
+    #yr= datetime.date.today().year
+    #month=datetime.date.today().month
+    #day=datetime.date.today().day
+    #now=str(yr*10000+month*100+day)
+    time_now = datetime.datetime.now()
+    now=str(time_now.year*10000+time_now.month*100+time_now.day)+'-'+str(100+time_now.hour)[1:]+str(100+time_now.minute)[1:]    
 	
-	#== Create directories if not existing.    
+    #== Create directories if not existing.    
     for i,pixel in enumerate(pix_list):
     	sdir=sdir_list[i]
         
@@ -788,34 +812,37 @@ def proc_mws(args):
     #== Writing slurm scripts and lists of input files (x.xxx) for each job (group jobs according to fiber numbers and processors per node)
     n_node=len(pix_gp_list) # requested node number = pixel group number
     print('Number of jobs to be submitted:',n_node+len(pix_list))
-    for i in range(n_node):   	
-    	file_ind=str(1000+i)[1:]
-    	
-    	#== Generating files that store lists of input files
-    	f=open(os.path.join(out_script_path,now,'x.'+file_ind),'w')
-    	sub_pixels=pix_gp_list[i]
-    	sub_sdirs=sdir_gp_list[i]
-    	for pixel,sdir in zip(sub_pixels,sub_sdirs):
-    		entry=path+'/'+str(sdir)+'/'+str(pixel)
-    		f.write(entry+"/spectra-64-"+str(pixel)+".fits \n")
-    		#print(entry+"/spectra-64-"+str(pixel)+".fits")
-    	f.close()
-    	suffix='rvspecfit_'+file_ind 
-    		
-    	#== Generating slurm scripts
-    	n_fiber=fn_sum_list[i]
-    	write_slurm_tot(out_script_path,out_path,file_ind,path,sdir_gp_list[i],pix_gp_list[i],min_expid,n_fiber,nthreads, suffix,whole_spectra64,mwonly)
-    	for sdir,pixel in zip(sdir_list,pix_list):
-    		cmd="python3 -c \"import sys; sys.path.insert(0, '"+python_path+"'); from piferre import write_slurm; write_slurm(\'"+str(sdir)+"\',\'"+str(pixel)+"\',\'"+str(out_path)+"\', script_path='"+os.path.join(out_script_path,now)+"', ngrids=9, nthreads=4)\"\n"
-    		#print('cmd=',cmd)
-    		err=subprocess.call(cmd,shell=True)
-    		   		
-    	write_script_tot_gp(os.path.join(out_script_path),out_path,path,sdir_gp_list[i],pix_gp_list[i],file_ind,min_expid,nthreads=nthreads, suffix=suffix, mwonly=mwonly)
-    		
-    #== Executing the shell script and submitting jobs	
+    for i in range(n_node):
+        file_ind=str(1000+i)[1:]
+
+        #== Generating files that store lists of input files
+        f=open(os.path.join(out_script_path,now,'x.'+file_ind),'w')
+        sub_pixels=pix_gp_list[i]
+        sub_sdirs=sdir_gp_list[i]
+        for pixel,sdir in zip(sub_pixels,sub_sdirs):
+            entry=path+'/'+str(sdir)+'/'+str(pixel)
+            f.write(entry+"/spectra-64-"+str(pixel)+".fits \n")
+        f.close()
+        suffix='rvspecfit_'+file_ind
+
+        #== Generating slurm scripts
+        print('Generating rvspecfit slurm scripts....',i,'/',n_node)
+        n_fiber=fn_sum_list[i]
+        write_slurm_tot(out_script_path,out_path,file_ind,path,sdir_gp_list[i],pix_gp_list[i],now,min_expid,n_fiber,nthreads, suffix,whole_spectra64,mwonly)
+        print('Writing shell scripts....',i,'/',n_node)
+        write_script_tot_gp(os.path.join(out_script_path),out_path,path,sdir_gp_list[i],pix_gp_list[i],now,file_ind,min_expid,nthreads=nthreads, suffix=suffix, mwonly=mwonly)
+    print('Generating ferre slurm scripts....')
+    for sdir,pixel,n_fiber in zip(sdir_list,pix_list,n_proc_now):
+        print('pixel number:',pixel)
+        cmd="python3 -c \"import sys; sys.path.insert(0, '"+python_path+"'); from piferre import write_slurm; write_slurm(\'"+str(sdir)+"\',\'"+str(pixel)+"\', \'"+str(out_path)+"\',"+str(n_fiber)+" , script_path='"+os.path.join(out_script_path,now)+"', ngrids=9, nthreads=4)\"\n"
+        #print('cmd=',cmd)
+        err=subprocess.call(cmd,shell=True)
+
+    #== Executing the shell script and submitting jobs
     run_scripts(os.path.join(out_script_path,now))
     	
     
 if __name__ == "__main__":
 
-	proc_mws(sys.argv[1:])
+    proc_mws(sys.argv[1:])
+  
