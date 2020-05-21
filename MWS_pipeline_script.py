@@ -301,7 +301,7 @@ def write_slurm_tot(out_script_path,out_path,file_ind,in_path,prefixs,sdirs,pixe
     # Calculate the requested runtime. Assuming analysis time per fiber per processor is 55 s.
     # Minimun asking for 10 min, and adding additional 5 min each time when more runtime is needed.
     if (n_fiber > 0):
-        runtime=55.0*np.ceil(n_fiber/nthreads) # in second.
+        runtime=np.ceil(55.0*(n_fiber/nthreads)) # in second.
         rt_5m=np.ceil(runtime/(5.0*60.0))
         rt_hr=int(rt_5m//12)
         if(rt_hr == 0):
